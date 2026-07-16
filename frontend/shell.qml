@@ -78,27 +78,28 @@ PanelWindow {
         socket.flush()
     }
 
-    // The compositor may assign the layer surface to a different screen just
-    // after it becomes visible. Wait briefly for that assignment to settle so
-    // restore and save both use the same screen name.
-    onScreenChanged: {
-        if (visible) {
-            card.visible = false
-            positionTimer.restart()
-        }
+    function revealCard() {
+        if (!visible || !backingWindowVisible || width <= 0 || height <= 0)
+            return
+
+        card.width = Math.min(uiConfig.width, width)
+        card.height = Math.min(uiConfig.height, height)
+        applyPosition(pendingPositions)
+        card.visible = true
+        input.forceActiveFocus()
     }
 
-    Timer {
-        id: positionTimer
-        interval: 75
-        repeat: false
-        onTriggered: {
-            card.width = Math.min(window.uiConfig.width, window.width)
-            card.height = Math.min(window.uiConfig.height, window.height)
-            window.applyPosition(window.pendingPositions)
-            card.visible = true
-            input.forceActiveFocus()
-        }
+    // Mapping and output assignment are asynchronous, but both expose change
+    // signals. React to those directly rather than delaying by an arbitrary
+    // amount of time.
+    onBackingWindowVisibleChanged: {
+        if (backingWindowVisible)
+            revealCard()
+    }
+
+    onScreenChanged: {
+        if (visible && backingWindowVisible)
+            revealCard()
     }
 
     Socket {
@@ -127,7 +128,7 @@ PanelWindow {
 
                     card.visible = false
                     window.visible = true
-                    positionTimer.restart()
+                    window.revealCard()
                 }
             }
         }
