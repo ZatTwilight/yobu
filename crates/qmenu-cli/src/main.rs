@@ -98,7 +98,7 @@ fn measure_display() -> io::Result<Duration> {
     stream.set_read_timeout(Some(Duration::from_secs(30)))?;
     show(&mut stream, "Benchmark".into(), Vec::new(), true)?;
 
-    for line in BufReader::new(stream).lines() {
+    if let Some(line) = BufReader::new(stream).lines().next() {
         match serde_json::from_str::<Message>(&line?)? {
             Message::Presented => return Ok(started.elapsed()),
             Message::Error { message } => return Err(io::Error::other(message)),
