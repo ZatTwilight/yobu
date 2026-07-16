@@ -42,6 +42,7 @@ PanelWindow {
     function finish(message) {
         socket.write(JSON.stringify(message) + "\n")
         socket.flush()
+        card.visible = false
         visible = false
     }
 
@@ -94,13 +95,21 @@ PanelWindow {
                     window.prompt = message.prompt
                     window.entries = message.entries
                     window.uiConfig = message.config
-                    card.width = Math.min(message.config.width, window.width)
-                    card.height = Math.min(message.config.height, window.height)
-                    window.applyPosition(message.positions)
                     input.text = ""
                     list.currentIndex = message.entries.length > 0 ? 0 : -1
+
+                    // An invisible layer-shell window has no usable geometry.
+                    // Show its transparent surface first, then position and
+                    // reveal the card once the compositor has sized it.
+                    card.visible = false
                     window.visible = true
-                    Qt.callLater(() => input.forceActiveFocus())
+                    Qt.callLater(() => {
+                        card.width = Math.min(message.config.width, window.width)
+                        card.height = Math.min(message.config.height, window.height)
+                        window.applyPosition(message.positions)
+                        card.visible = true
+                        input.forceActiveFocus()
+                    })
                 }
             }
         }
@@ -113,6 +122,7 @@ PanelWindow {
 
     Rectangle {
         id: card
+        visible: false
         width: 600
         height: 420
         x: (window.width - width) / 2
