@@ -85,17 +85,13 @@ fn handle_frontend(
         match message {
             Message::Selected { ref value } => {
                 let mut shared = state.lock().unwrap();
-                if value.starts_with("app:") {
-                    if let Err(error) = shared.applications.launch(value)
-                        && let Some(client) = shared.client.as_mut()
-                    {
-                        send(
-                            client,
-                            &Message::Error {
-                                message: error.to_string(),
-                            },
-                        )?;
-                    }
+                if value.starts_with("app:") && let Err(error) = shared.applications.launch(value) && let Some(client) = shared.client.as_mut() {
+                    send(
+                        client,
+                        &Message::Error {
+                            message: error.to_string(),
+                        },
+                    )?;
                 }
                 if let Some(mut client) = shared.client.take() {
                     send(&mut client, &message)?;
@@ -168,6 +164,7 @@ fn handle_client(
             (message, spawn)
         }
     };
+    println!("Should spawn {:?} - message: {:?}", should_spawn, message);
     drop(message);
 
     if should_spawn && let Err(error) = spawn_frontend() {

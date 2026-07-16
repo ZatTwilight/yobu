@@ -2,6 +2,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
+import Quickshell.Hyprland
 
 PanelWindow {
     id: window
@@ -24,7 +25,18 @@ PanelWindow {
     property var uiConfig: ({ width: 600, height: 420, max_results: 50 })
     property var pendingPositions: ({})
     property real dragStartX: 0
-    property real dragStartY: 0
+	property real dragStartY: 0
+
+	function focusedScreen() {
+		const monitor = Hyprland.focusedMonitor
+		if (!monitor)
+		return null
+
+		return Quickshell.screens.find(
+			screen => screen.name === monitor.name
+		) ?? null
+	}
+
 
     function finish(message) {
         socket.write(JSON.stringify(message) + "\n")
@@ -33,10 +45,10 @@ PanelWindow {
         visible = false
     }
 
-    function applyPosition(positions) {
-        const availableWidth = Math.max(0, width - launcher.width)
-        const availableHeight = Math.max(0, height - launcher.height)
-        const saved = positions[screen.name]
+	function applyPosition(positions) {
+        const availableWidth = Math.max(0, window.screen.width - launcher.width)
+        const availableHeight = Math.max(0, window.screen.height - launcher.height)
+		const saved = positions[screen.name]
 
         if (saved) {
             launcher.x = Math.round(saved.x * availableWidth)
@@ -59,9 +71,8 @@ PanelWindow {
         socket.flush()
     }
 
-    function revealLauncher() {
-        if (!visible || !backingWindowVisible || width <= 0 || height <= 0)
-            return
+	function revealLauncher() {
+		if (!visible || !backingWindowVisible || width <= 0 || height <= 0) return
 
         launcher.width = Math.min(uiConfig.width, width)
         launcher.height = Math.min(uiConfig.height, height)
@@ -70,15 +81,6 @@ PanelWindow {
         launcher.focusInput()
     }
 
-    onBackingWindowVisibleChanged: {
-        if (backingWindowVisible)
-            revealLauncher()
-    }
-
-    onScreenChanged: {
-        if (visible && backingWindowVisible)
-            revealLauncher()
-    }
 
     Socket {
         id: socket
@@ -94,8 +96,9 @@ PanelWindow {
         }
 
         parser: SplitParser {
-            onRead: data => {
+			onRead: data => {
                 const message = JSON.parse(data)
+				console.log("got message", message.type)
                 if (message.type === "show") {
                     window.uiConfig = message.config
                     window.pendingPositions = message.positions
@@ -104,7 +107,8 @@ PanelWindow {
                     launcher.maxResults = message.config.max_results
                     launcher.reset()
                     launcher.visible = false
-                    window.visible = true
+					window.visible = true
+					window.screen = window.focusedScreen()
                     window.revealLauncher()
                 }
             }
