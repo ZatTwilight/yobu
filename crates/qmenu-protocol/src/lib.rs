@@ -44,6 +44,8 @@ pub enum Message {
         entries: Vec<Entry>,
         positions: HashMap<String, Position>,
         config: UiConfig,
+        #[serde(default)]
+        benchmark: bool,
     },
     Position {
         screen: String,
@@ -53,6 +55,7 @@ pub enum Message {
     Selected {
         value: String,
     },
+    Presented,
     Cancelled,
     Error {
         message: String,

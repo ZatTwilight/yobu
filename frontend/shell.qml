@@ -24,6 +24,7 @@ PanelWindow {
 
     property var uiConfig: ({ width: 600, height: 420, max_results: 50 })
     property var pendingPositions: ({})
+    property bool benchmarkDisplay: false
     property real dragStartX: 0
 	property real dragStartY: 0
 
@@ -41,6 +42,7 @@ PanelWindow {
     function finish(message) {
         socket.write(JSON.stringify(message) + "\n")
         socket.flush()
+        benchmarkDisplay = false
         launcher.visible = false
         visible = false
     }
@@ -81,6 +83,16 @@ PanelWindow {
         launcher.focusInput()
     }
 
+    onBackingWindowVisibleChanged: revealLauncher()
+
+    Connections {
+        target: launcher.Window.window
+
+        function onFrameSwapped() {
+            if (window.benchmarkDisplay && launcher.visible)
+                window.finish({ type: "presented" })
+        }
+    }
 
     Socket {
         id: socket
@@ -102,6 +114,7 @@ PanelWindow {
                 if (message.type === "show") {
                     window.uiConfig = message.config
                     window.pendingPositions = message.positions
+                    window.benchmarkDisplay = message.benchmark === true
                     launcher.prompt = message.prompt
                     launcher.entries = message.entries
                     launcher.maxResults = message.config.max_results

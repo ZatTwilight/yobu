@@ -1,8 +1,7 @@
-mod apps;
 mod config;
 
-use apps::Applications;
 use config::SavedState;
+use qmenu_daemon::apps::Applications;
 use qmenu_protocol::{Message, Role};
 use std::{
     env, fs,
@@ -85,7 +84,10 @@ fn handle_frontend(
         match message {
             Message::Selected { ref value } => {
                 let mut shared = state.lock().unwrap();
-                if value.starts_with("app:") && let Err(error) = shared.applications.launch(value) && let Some(client) = shared.client.as_mut() {
+                if value.starts_with("app:")
+                    && let Err(error) = shared.applications.launch(value)
+                    && let Some(client) = shared.client.as_mut()
+                {
                     send(
                         client,
                         &Message::Error {
@@ -97,7 +99,7 @@ fn handle_frontend(
                     send(&mut client, &message)?;
                 }
             }
-            Message::Cancelled => {
+            Message::Presented | Message::Cancelled => {
                 let mut shared = state.lock().unwrap();
                 if let Some(mut client) = shared.client.take() {
                     send(&mut client, &message)?;
@@ -133,7 +135,10 @@ fn handle_client(
     };
     let request: Message = serde_json::from_str(&line?)?;
     let Message::Show {
-        prompt, entries, ..
+        prompt,
+        entries,
+        benchmark,
+        ..
     } = request
     else {
         return Ok(());
@@ -151,6 +156,7 @@ fn handle_client(
             entries,
             positions: shared.saved.positions.clone(),
             config: shared.ui_config.clone(),
+            benchmark,
         };
         shared.client = Some(stream.try_clone()?);
 

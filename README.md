@@ -45,6 +45,33 @@ max_results = 50
 
 See `config.example.toml`.
 
+## Performance benchmarks
+
+Run the Criterion benchmarks in release mode:
+
+```sh
+cargo bench -p qmenu-daemon --bench performance
+```
+
+They cover desktop-entry discovery, JSON serialization at several catalog sizes, and a Rust equivalent of the frontend's current substring search. Criterion stores detailed reports under `target/criterion/`.
+
+With the daemon running, measure the real request-to-first-animation-frame path:
+
+```sh
+cargo run --release -q -p qmenu -- --benchmark-display 20
+```
+
+The display benchmark includes socket connection, request serialization, daemon forwarding, frontend JSON/model setup, and the first frame queued for presentation after the launcher becomes visible. It excludes daemon startup and CLI process startup. The first sample includes Quickshell startup when no frontend is already connected; the command reports warm and steady-state statistics separately. Iterations have an unmeasured 100 ms settling period so the compositor can process each unmap before the next request.
+
+To include CLI process startup, build first and time a single warm display externally:
+
+```sh
+cargo build --release -p qmenu
+hyperfine --warmup 3 'target/release/qmenu --benchmark-display 1'
+```
+
+The benchmark closes the launcher automatically after each frame.
+
 ## Check the project
 
 ```sh

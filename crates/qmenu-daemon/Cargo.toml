@@ -10,3 +10,10 @@ serde.workspace = true
 serde_json.workspace = true
 toml.workspace = true
 freedesktop-desktop-entry.workspace = true
+
+[dev-dependencies]
+criterion = "0.8"
+
+[[bench]]
+name = "performance"
+harness = false
