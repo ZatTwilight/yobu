@@ -28,6 +28,7 @@ PanelWindow {
     property var entries: []
     property string query: ""
     property var uiConfig: ({ width: 600, height: 420, max_results: 50 })
+    property var pendingPositions: ({})
     property var filteredEntries: {
         const needle = query.trim().toLowerCase()
         const matches = needle === ""
@@ -48,19 +49,21 @@ PanelWindow {
 
     function selectCurrent() {
         const entry = filteredEntries[list.currentIndex]
-        if (entry)
-            finish({ type: "selected", value: entry.value })
+        if (entry) finish({ type: "selected", value: entry.value })
     }
 
     function applyPosition(positions) {
+        const availableWidth = Math.max(0, width - card.width)
+        const availableHeight = Math.max(0, height - card.height)
         const saved = positions[screen.name]
-        if (!saved) {
-            card.x = (width - card.width) / 2
-            card.y = (height - card.height) / 2
-            return
+
+        if (saved) {
+            card.x = Math.round(saved.x * availableWidth)
+            card.y = Math.round(saved.y * availableHeight)
+        } else {
+            card.x = Math.round(availableWidth / 2)
+            card.y = Math.round(availableHeight / 2)
         }
-        card.x = saved.x * Math.max(0, width - card.width)
-        card.y = saved.y * Math.max(0, height - card.height)
     }
 
     function savePosition() {
@@ -73,6 +76,29 @@ PanelWindow {
             y: card.y / availableHeight
         }) + "\n")
         socket.flush()
+    }
+
+    // The compositor may assign the layer surface to a different screen just
+    // after it becomes visible. Wait briefly for that assignment to settle so
+    // restore and save both use the same screen name.
+    onScreenChanged: {
+        if (visible) {
+            card.visible = false
+            positionTimer.restart()
+        }
+    }
+
+    Timer {
+        id: positionTimer
+        interval: 75
+        repeat: false
+        onTriggered: {
+            card.width = Math.min(window.uiConfig.width, window.width)
+            card.height = Math.min(window.uiConfig.height, window.height)
+            window.applyPosition(window.pendingPositions)
+            card.visible = true
+            input.forceActiveFocus()
+        }
     }
 
     Socket {
@@ -95,21 +121,13 @@ PanelWindow {
                     window.prompt = message.prompt
                     window.entries = message.entries
                     window.uiConfig = message.config
+                    window.pendingPositions = message.positions
                     input.text = ""
                     list.currentIndex = message.entries.length > 0 ? 0 : -1
 
-                    // An invisible layer-shell window has no usable geometry.
-                    // Show its transparent surface first, then position and
-                    // reveal the card once the compositor has sized it.
                     card.visible = false
                     window.visible = true
-                    Qt.callLater(() => {
-                        card.width = Math.min(message.config.width, window.width)
-                        card.height = Math.min(message.config.height, window.height)
-                        window.applyPosition(message.positions)
-                        card.visible = true
-                        input.forceActiveFocus()
-                    })
+                    positionTimer.restart()
                 }
             }
         }
