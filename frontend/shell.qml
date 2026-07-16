@@ -9,6 +9,7 @@ import Quickshell.Widgets
 PanelWindow {
     id: window
 
+    visible: false
     color: "transparent"
     exclusiveZone: 0
 
@@ -41,7 +42,7 @@ PanelWindow {
     function finish(message) {
         socket.write(JSON.stringify(message) + "\n")
         socket.flush()
-        Qt.callLater(Qt.quit)
+        visible = false
     }
 
     function selectCurrent() {
@@ -98,6 +99,7 @@ PanelWindow {
                     window.applyPosition(message.positions)
                     input.text = ""
                     list.currentIndex = message.entries.length > 0 ? 0 : -1
+                    window.visible = true
                     Qt.callLater(() => input.forceActiveFocus())
                 }
             }
