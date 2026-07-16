@@ -1,0 +1,8 @@
+[package]
+name = "qmenu-daemon"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+qmenu-protocol.workspace = true

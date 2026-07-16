@@ -1,0 +1,13 @@
+[workspace]
+members = ["crates/qmenu-cli", "crates/qmenu-daemon", "crates/qmenu-protocol"]
+resolver = "2"
+
+[workspace.package]
+edition = "2024"
+license = "MIT"
+version = "0.1.0"
+
+[workspace.dependencies]
+qmenu-protocol = { path = "crates/qmenu-protocol" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
