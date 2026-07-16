@@ -22,27 +22,26 @@ fn send(stream: &mut UnixStream, message: &Message) -> io::Result<()> {
 }
 
 fn main() -> io::Result<()> {
-    let prompt = env::args().nth(1).unwrap_or_else(|| "Search…".into());
-    if io::stdin().is_terminal() {
-        eprintln!("qmenu: expected newline-delimited entries on stdin");
-        std::process::exit(2);
-    }
-
-    let entries = io::stdin()
-        .lock()
-        .lines()
-        .enumerate()
-        .map(|(index, line)| {
-            let value = line?;
-            Ok(Entry {
-                id: index.to_string(),
-                label: value.clone(),
-                description: None,
-                icon: None,
-                value,
+    let prompt = env::args().nth(1).unwrap_or_else(|| "Applications".into());
+    let entries = if io::stdin().is_terminal() {
+        Vec::new()
+    } else {
+        io::stdin()
+            .lock()
+            .lines()
+            .enumerate()
+            .map(|(index, line)| {
+                let value = line?;
+                Ok(Entry {
+                    id: index.to_string(),
+                    label: value.clone(),
+                    description: None,
+                    icon: None,
+                    value,
+                })
             })
-        })
-        .collect::<io::Result<Vec<_>>>()?;
+            .collect::<io::Result<Vec<_>>>()?
+    };
 
     let mut stream = UnixStream::connect(socket_path()).map_err(|error| {
         io::Error::new(
@@ -51,12 +50,21 @@ fn main() -> io::Result<()> {
         )
     })?;
     send(&mut stream, &Message::Hello { role: Role::Client })?;
-    send(&mut stream, &Message::Show { prompt, entries })?;
+    send(
+        &mut stream,
+        &Message::Show {
+            prompt,
+            entries,
+            positions: Default::default(),
+            config: Default::default(),
+        },
+    )?;
 
     let mut lines = BufReader::new(stream).lines();
     if let Some(line) = lines.next() {
         match serde_json::from_str::<Message>(&line?)? {
-            Message::Selected { value } => println!("{value}"),
+            Message::Selected { value } if !value.starts_with("app:") => println!("{value}"),
+            Message::Selected { .. } => {}
             Message::Cancelled => std::process::exit(1),
             Message::Error { message } => return Err(io::Error::other(message)),
             _ => {}
