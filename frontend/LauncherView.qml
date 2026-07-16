@@ -111,13 +111,16 @@ Rectangle {
                     anchors.rightMargin: 10
                     spacing: 10
 
-                    IconImage {
+                    Image {
                         visible: source != ""
                         source: entry.modelData.icon
                             ? Quickshell.iconPath(entry.modelData.icon, true)
                             : ""
                         Layout.preferredWidth: 24
                         Layout.preferredHeight: 24
+                        sourceSize.width: 24
+                        sourceSize.height: 24
+                        fillMode: Image.PreserveAspectFit
                     }
 
                     ColumnLayout {
