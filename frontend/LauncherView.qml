@@ -14,16 +14,13 @@ Rectangle {
 
     signal accepted(var entry)
     signal cancelRequested()
+    signal queryChanged(string query)
 
-    property var filteredEntries: {
-        const needle = input.text.trim().toLowerCase()
-        const matches = needle === ""
-            ? entries
-            : entries.filter(entry => {
-                const text = `${entry.label} ${entry.description ?? ""}`.toLowerCase()
-                return text.includes(needle)
-            })
-        return matches.slice(0, maxResults)
+    property var filteredEntries: entries.slice(0, maxResults)
+
+    function applySearchResults(query, results) {
+        if (input.text === query)
+            entries = results
     }
 
     function reset() {
@@ -76,7 +73,10 @@ Rectangle {
             focus: true
             placeholderText: root.prompt
 
-            onTextChanged: list.currentIndex = root.filteredEntries.length > 0 ? 0 : -1
+            onTextChanged: {
+                list.currentIndex = root.filteredEntries.length > 0 ? 0 : -1
+                root.queryChanged(text)
+            }
             Keys.onEscapePressed: root.cancelRequested()
             Keys.onUpPressed: list.decrementCurrentIndex()
             Keys.onDownPressed: list.incrementCurrentIndex()

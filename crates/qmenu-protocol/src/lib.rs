@@ -47,6 +47,13 @@ pub enum Message {
         #[serde(default)]
         benchmark: bool,
     },
+    Search {
+        query: String,
+    },
+    SearchResults {
+        query: String,
+        entries: Vec<Entry>,
+    },
     Position {
         screen: String,
         x: f64,

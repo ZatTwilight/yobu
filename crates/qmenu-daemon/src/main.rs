@@ -1,8 +1,11 @@
 mod config;
 
 use config::SavedState;
-use qmenu_daemon::apps::Applications;
-use qmenu_protocol::{Message, Role};
+use qmenu_daemon::{
+    apps::Applications,
+    calculator::{Calculation, Calculator},
+};
+use qmenu_protocol::{Entry, Message, Role};
 use std::{
     env, fs,
     io::{self, BufRead, BufReader, Write},
@@ -19,6 +22,9 @@ struct State {
     pending: Option<Message>,
     frontend_starting: bool,
     applications: Applications,
+    active_entries: Vec<Entry>,
+    native_mode: bool,
+    calculator: Option<Calculator>,
     saved: SavedState,
     ui_config: qmenu_protocol::UiConfig,
 }
@@ -99,6 +105,24 @@ fn handle_frontend(
                     send(&mut client, &message)?;
                 }
             }
+            Message::Search { query } => {
+                let mut shared = state.lock().unwrap();
+                let calculation = if shared.native_mode {
+                    shared
+                        .calculator
+                        .as_mut()
+                        .and_then(|calculator| calculator.calculate(&query))
+                } else {
+                    None
+                };
+                let entries = match calculation {
+                    Some(calculation) => vec![calculation_entry(&query, calculation)],
+                    None => {
+                        search_entries(&shared.active_entries, &query, shared.ui_config.max_results)
+                    }
+                };
+                send(&mut writer, &Message::SearchResults { query, entries })?;
+            }
             Message::Presented | Message::Cancelled => {
                 let mut shared = state.lock().unwrap();
                 if let Some(mut client) = shared.client.take() {
@@ -146,14 +170,17 @@ fn handle_client(
 
     let (message, should_spawn) = {
         let mut shared = state.lock().unwrap();
-        let entries = if entries.is_empty() {
+        shared.native_mode = entries.is_empty();
+        shared.active_entries = if shared.native_mode {
             shared.applications.entries.clone()
         } else {
             entries
         };
+        let initial_entries =
+            search_entries(&shared.active_entries, "", shared.ui_config.max_results);
         let message = Message::Show {
             prompt,
-            entries,
+            entries: initial_entries,
             positions: shared.saved.positions.clone(),
             config: shared.ui_config.clone(),
             benchmark,
@@ -170,7 +197,6 @@ fn handle_client(
             (message, spawn)
         }
     };
-    println!("Should spawn {:?} - message: {:?}", should_spawn, message);
     drop(message);
 
     if should_spawn && let Err(error) = spawn_frontend() {
@@ -189,6 +215,33 @@ fn handle_client(
     Ok(())
 }
 
+fn search_entries(entries: &[Entry], query: &str, max_results: usize) -> Vec<Entry> {
+    let needle = query.trim().to_lowercase();
+    entries
+        .iter()
+        .filter(|entry| {
+            needle.is_empty()
+                || entry.label.to_lowercase().contains(&needle)
+                || entry
+                    .description
+                    .as_deref()
+                    .is_some_and(|description| description.to_lowercase().contains(&needle))
+        })
+        .take(max_results)
+        .cloned()
+        .collect()
+}
+
+fn calculation_entry(query: &str, calculation: Calculation) -> Entry {
+    Entry {
+        id: "calculation".into(),
+        label: calculation.value.clone(),
+        description: Some(format!("{} · {query}", calculation.kind)),
+        icon: Some("accessories-calculator".into()),
+        value: calculation.value,
+    }
+}
+
 fn main() -> io::Result<()> {
     let path = socket_path();
     if path.exists() {
@@ -198,12 +251,23 @@ fn main() -> io::Result<()> {
     let listener = UnixListener::bind(&path)?;
     println!("qmenu daemon listening on {}", path.display());
 
+    let calculator = match Calculator::new() {
+        Ok(calculator) => Some(calculator),
+        Err(error) => {
+            eprintln!("Numby unavailable; calculator results disabled: {error}");
+            None
+        }
+    };
+
     let state = Arc::new(Mutex::new(State {
         frontend: None,
         client: None,
         pending: None,
         frontend_starting: false,
         applications: Applications::discover(),
+        active_entries: Vec::new(),
+        native_mode: false,
+        calculator,
         saved: config::load_state(),
         ui_config: config::load_config(),
     }));

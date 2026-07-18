@@ -33,6 +33,12 @@ The daemon starts Quickshell, forwards the entries, and returns piped selections
 
 Set `QMENU_SOCKET` to override the Unix socket path and `QMENU_FRONTEND` to override the QML entrypoint.
 
+## Calculator results
+
+The native application launcher evaluates non-empty queries with the MIT-licensed Numby engine. Calculations—including arithmetic, percentages, units, currencies, dates, and timezone queries—replace application matches with their formatted result. Queries that are not calculations continue through application search. Piped menus do not invoke the calculator.
+
+The calculator runs directly inside the Rust daemon and keeps Numby's variable and history state for the daemon's lifetime.
+
 The launcher can be dragged by its top handle. Its normalized position is saved per monitor in `$XDG_STATE_HOME/qmenu/state.toml` (normally `~/.local/state/qmenu/state.toml`).
 
 Optional UI configuration is loaded from `$XDG_CONFIG_HOME/qmenu/config.toml`:

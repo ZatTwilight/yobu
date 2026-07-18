@@ -123,6 +123,8 @@ PanelWindow {
 					window.visible = true
 					window.screen = window.focusedScreen()
                     window.revealLauncher()
+                } else if (message.type === "search_results") {
+                    launcher.applySearchResults(message.query, message.entries)
                 }
             }
         }
@@ -143,6 +145,12 @@ PanelWindow {
 
         onAccepted: entry => window.finish({ type: "selected", value: entry.value })
         onCancelRequested: window.finish({ type: "cancelled" })
+        onQueryChanged: query => {
+            if (socket.connected) {
+                socket.write(JSON.stringify({ type: "search", query: query }) + "\n")
+                socket.flush()
+            }
+        }
     }
 
     DragHandler {
