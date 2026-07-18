@@ -1,5 +1,5 @@
 use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
-use qmenu_daemon::apps::Applications;
+use qmenu_daemon::{apps::Applications, search::SearchIndex};
 use qmenu_protocol::{Entry, Message};
 use std::{collections::HashMap, hint::black_box, time::Duration};
 
@@ -19,31 +19,6 @@ fn synthetic_entries(count: usize) -> Vec<Entry> {
         .collect()
 }
 
-// This mirrors LauncherView.qml's current lowercase substring filter. It is a
-// Rust baseline for comparing a future daemon-side matcher, not a QML runtime
-// measurement. The display benchmark exercises the real QML path.
-fn substring_filter<'a>(entries: &'a [Entry], query: &str, max_results: usize) -> Vec<&'a Entry> {
-    let needle = query.trim().to_lowercase();
-    if needle.is_empty() {
-        return entries.iter().take(max_results).collect();
-    }
-
-    let mut matches: Vec<_> = entries
-        .iter()
-        .filter(|entry| {
-            format!(
-                "{} {}",
-                entry.label,
-                entry.description.as_deref().unwrap_or_default()
-            )
-            .to_lowercase()
-            .contains(&needle)
-        })
-        .collect();
-    matches.truncate(max_results);
-    matches
-}
-
 fn desktop_discovery(c: &mut Criterion) {
     let mut group = c.benchmark_group("desktop_entries");
     group.sample_size(20);
@@ -55,11 +30,11 @@ fn desktop_discovery(c: &mut Criterion) {
     group.finish();
 }
 
-fn search_baseline(c: &mut Criterion) {
-    let mut group = c.benchmark_group("substring_search_rust_baseline");
+fn fuzzy_search(c: &mut Criterion) {
+    let mut group = c.benchmark_group("fuzzy_search");
     group.sample_size(50);
     for count in [100, 1_000, 10_000] {
-        let entries = synthetic_entries(count);
+        let index = SearchIndex::new(synthetic_entries(count));
 
         for (name, query) in [
             ("empty", "".to_owned()),
@@ -67,13 +42,9 @@ fn search_baseline(c: &mut Criterion) {
             ("last_entry", format!("Application {}", count - 1)),
             ("no_match", "this does not exist".to_owned()),
         ] {
-            group.bench_with_input(
-                BenchmarkId::new(name, count),
-                &(entries.as_slice(), query),
-                |b, (entries, query)| {
-                    b.iter(|| substring_filter(black_box(entries), black_box(query), 50))
-                },
-            );
+            group.bench_with_input(BenchmarkId::new(name, count), &query, |b, query| {
+                b.iter(|| index.search(black_box(query), 50, black_box(&[])))
+            });
         }
     }
     group.finish();
@@ -103,7 +74,7 @@ fn show_message_serialization(c: &mut Criterion) {
 criterion_group!(
     performance,
     desktop_discovery,
-    search_baseline,
+    fuzzy_search,
     show_message_serialization
 );
 criterion_main!(performance);

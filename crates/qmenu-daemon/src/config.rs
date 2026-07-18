@@ -6,6 +6,17 @@ use std::{collections::HashMap, env, fs, io, path::PathBuf};
 pub struct SavedState {
     #[serde(default)]
     pub positions: HashMap<String, Position>,
+    /// Application IDs in most-recently-used order.
+    #[serde(default)]
+    pub recent_applications: Vec<String>,
+}
+
+impl SavedState {
+    pub fn record_application(&mut self, id: &str) {
+        self.recent_applications.retain(|recent| recent != id);
+        self.recent_applications.insert(0, id.to_owned());
+        self.recent_applications.truncate(100);
+    }
 }
 
 pub fn load_config() -> UiConfig {

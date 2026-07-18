@@ -4,6 +4,7 @@ use config::SavedState;
 use qmenu_daemon::{
     apps::Applications,
     calculator::{Calculation, Calculator},
+    search::SearchIndex,
 };
 use qmenu_protocol::{Entry, Message, Role};
 use std::{
@@ -22,7 +23,7 @@ struct State {
     pending: Option<Message>,
     frontend_starting: bool,
     applications: Applications,
-    active_entries: Vec<Entry>,
+    active_entries: SearchIndex,
     native_mode: bool,
     calculator: Option<Calculator>,
     saved: SavedState,
@@ -90,16 +91,25 @@ fn handle_frontend(
         match message {
             Message::Selected { ref value } => {
                 let mut shared = state.lock().unwrap();
-                if value.starts_with("app:")
-                    && let Err(error) = shared.applications.launch(value)
-                    && let Some(client) = shared.client.as_mut()
-                {
-                    send(
-                        client,
-                        &Message::Error {
-                            message: error.to_string(),
-                        },
-                    )?;
+                if value.starts_with("app:") {
+                    match shared.applications.launch(value) {
+                        Ok(()) => {
+                            shared.saved.record_application(value);
+                            if let Err(error) = config::save_state(&shared.saved) {
+                                eprintln!("failed to save application recency: {error}");
+                            }
+                        }
+                        Err(error) => {
+                            if let Some(client) = shared.client.as_mut() {
+                                send(
+                                    client,
+                                    &Message::Error {
+                                        message: error.to_string(),
+                                    },
+                                )?;
+                            }
+                        }
+                    }
                 }
                 if let Some(mut client) = shared.client.take() {
                     send(&mut client, &message)?;
@@ -117,9 +127,11 @@ fn handle_frontend(
                 };
                 let entries = match calculation {
                     Some(calculation) => vec![calculation_entry(&query, calculation)],
-                    None => {
-                        search_entries(&shared.active_entries, &query, shared.ui_config.max_results)
-                    }
+                    None => shared.active_entries.search(
+                        &query,
+                        shared.ui_config.max_results,
+                        &shared.saved.recent_applications,
+                    ),
                 };
                 send(&mut writer, &Message::SearchResults { query, entries })?;
             }
@@ -171,13 +183,17 @@ fn handle_client(
     let (message, should_spawn) = {
         let mut shared = state.lock().unwrap();
         shared.native_mode = entries.is_empty();
-        shared.active_entries = if shared.native_mode {
+        let entries = if shared.native_mode {
             shared.applications.entries.clone()
         } else {
             entries
         };
-        let initial_entries =
-            search_entries(&shared.active_entries, "", shared.ui_config.max_results);
+        shared.active_entries = SearchIndex::new(entries);
+        let initial_entries = shared.active_entries.search(
+            "",
+            shared.ui_config.max_results,
+            &shared.saved.recent_applications,
+        );
         let message = Message::Show {
             prompt,
             entries: initial_entries,
@@ -215,23 +231,6 @@ fn handle_client(
     Ok(())
 }
 
-fn search_entries(entries: &[Entry], query: &str, max_results: usize) -> Vec<Entry> {
-    let needle = query.trim().to_lowercase();
-    entries
-        .iter()
-        .filter(|entry| {
-            needle.is_empty()
-                || entry.label.to_lowercase().contains(&needle)
-                || entry
-                    .description
-                    .as_deref()
-                    .is_some_and(|description| description.to_lowercase().contains(&needle))
-        })
-        .take(max_results)
-        .cloned()
-        .collect()
-}
-
 fn calculation_entry(query: &str, calculation: Calculation) -> Entry {
     Entry {
         id: "calculation".into(),
@@ -265,7 +264,7 @@ fn main() -> io::Result<()> {
         pending: None,
         frontend_starting: false,
         applications: Applications::discover(),
-        active_entries: Vec::new(),
+        active_entries: SearchIndex::new(Vec::new()),
         native_mode: false,
         calculator,
         saved: config::load_state(),
