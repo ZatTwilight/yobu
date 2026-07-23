@@ -23,9 +23,10 @@ PanelWindow {
 
     WlrLayershell.layer: WlrLayer.Overlay
     WlrLayershell.keyboardFocus: WlrKeyboardFocus.OnDemand
-    WlrLayershell.namespace: "qmenu"
+    WlrLayershell.namespace: "yobu"
 
     property var uiConfig: ({ width: 600, height: 420, max_results: 50 })
+    readonly property var launcher: launcherLoader.item
     property var pendingPositions: ({})
     property bool benchmarkDisplay: false
     property real dragStartX: 0
@@ -102,7 +103,7 @@ PanelWindow {
     onHeightChanged: revealLauncher()
 
     Connections {
-        target: launcher.Window.window
+        target: window.launcher ? window.launcher.Window.window : null
 
         function onFrameSwapped() {
             if (window.benchmarkDisplay && launcher.visible)
@@ -112,8 +113,8 @@ PanelWindow {
 
     Socket {
         id: socket
-        path: (Quickshell.env("QMENU_SOCKET")
-            ?? ((Quickshell.env("XDG_RUNTIME_DIR") ?? "/tmp") + "/qmenu.sock"))
+        path: (Quickshell.env("YOBU_SOCKET")
+            ?? ((Quickshell.env("XDG_RUNTIME_DIR") ?? "/tmp") + "/yobu.sock"))
         connected: true
 
         onConnectedChanged: {
@@ -151,17 +152,36 @@ PanelWindow {
         onClicked: window.finish({ type: "cancelled" })
     }
 
-    LauncherView {
-        id: launcher
-        visible: false
-        width: 600
-        height: 420
-        x: (window.width - width) / 2
-        y: (window.height - height) / 2
+    Loader {
+        id: launcherLoader
+        source: Quickshell.env("YOBU_LAUNCHER_VIEW") ?? Qt.resolvedUrl("LauncherView.qml")
 
-        onAccepted: entry => window.finish({ type: "selected", value: entry.value })
-        onCancelRequested: window.finish({ type: "cancelled" })
-        onQueryChanged: query => {
+        onStatusChanged: {
+            if (status === Loader.Error && source !== Qt.resolvedUrl("LauncherView.qml")) {
+                console.warn("Failed to load custom yobu view; using bundled view")
+                source = Qt.resolvedUrl("LauncherView.qml")
+            }
+        }
+
+        onLoaded: {
+            item.visible = false
+            item.width = 600
+            item.height = 420
+            item.x = (window.width - item.width) / 2
+            item.y = (window.height - item.height) / 2
+        }
+    }
+
+    Connections {
+        target: window.launcher
+
+        function onAccepted(entry) {
+            window.finish({ type: "selected", value: entry.value })
+        }
+        function onCancelRequested() {
+            window.finish({ type: "cancelled" })
+        }
+        function onQueryChanged(query) {
             if (socket.connected) {
                 socket.write(JSON.stringify({ type: "search", query: query }) + "\n")
                 socket.flush()

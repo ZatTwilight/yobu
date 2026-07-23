@@ -1,5 +1,5 @@
 use neo_frizbee::{Config, Matcher};
-use qmenu_protocol::Entry;
+use yobu_protocol::Entry;
 use std::collections::HashMap;
 
 /// A menu catalog with precomputed strings for fuzzy matching.

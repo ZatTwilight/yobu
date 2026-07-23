@@ -1391,35 +1391,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d55d956fa96f5ec02be2e13af0e20391a5aa83d6a074e3ad368959d0fab299ea"
 
 [[package]]
-name = "qmenu"
-version = "0.1.0"
-dependencies = [
- "qmenu-protocol",
- "serde_json",
-]
-
-[[package]]
-name = "qmenu-daemon"
-version = "0.1.0"
-dependencies = [
- "criterion",
- "freedesktop-desktop-entry",
- "neo_frizbee",
- "numby",
- "qmenu-protocol",
- "serde",
- "serde_json",
- "toml",
-]
-
-[[package]]
-name = "qmenu-protocol"
-version = "0.1.0"
-dependencies = [
- "serde",
-]
-
-[[package]]
 name = "quick-error"
 version = "2.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2565,6 +2536,35 @@ name = "xdg"
 version = "3.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2fb433233f2df9344722454bc7e96465c9d03bff9d77c248f9e7523fe79585b5"
+
+[[package]]
+name = "yobu"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
+ "yobu-protocol",
+]
+
+[[package]]
+name = "yobu-daemon"
+version = "0.1.0"
+dependencies = [
+ "criterion",
+ "freedesktop-desktop-entry",
+ "neo_frizbee",
+ "numby",
+ "serde",
+ "serde_json",
+ "toml",
+ "yobu-protocol",
+]
+
+[[package]]
+name = "yobu-protocol"
+version = "0.1.0"
+dependencies = [
+ "serde",
+]
 
 [[package]]
 name = "yoke"

@@ -1,12 +1,12 @@
 mod config;
 
 use config::SavedState;
-use qmenu_daemon::{
+use yobu_daemon::{
     apps::Applications,
     calculator::{Calculation, Calculator},
     search::SearchIndex,
 };
-use qmenu_protocol::{Entry, Message, Role};
+use yobu_protocol::{Entry, Message, Role};
 use std::{
     env, fs,
     io::{self, BufRead, BufReader, Write},
@@ -27,15 +27,15 @@ struct State {
     native_mode: bool,
     calculator: Option<Calculator>,
     saved: SavedState,
-    ui_config: qmenu_protocol::UiConfig,
+    ui_config: yobu_protocol::UiConfig,
 }
 
 fn socket_path() -> PathBuf {
-    env::var_os("QMENU_SOCKET")
+    env::var_os("YOBU_SOCKET")
         .map(PathBuf::from)
         .unwrap_or_else(|| {
             PathBuf::from(env::var_os("XDG_RUNTIME_DIR").unwrap_or_else(|| "/tmp".into()))
-                .join("qmenu.sock")
+                .join("yobu.sock")
         })
 }
 
@@ -45,11 +45,33 @@ fn send(stream: &mut UnixStream, message: &Message) -> io::Result<()> {
     stream.flush()
 }
 
+const BUNDLED_SHELL: &str = include_str!("../../../frontend/shell.qml");
+const BUNDLED_VIEW: &str = include_str!("../../../frontend/LauncherView.qml");
+
 fn spawn_frontend() -> io::Result<()> {
-    let frontend = env::var_os("QMENU_FRONTEND")
+    let runtime_dir =
+        PathBuf::from(env::var_os("XDG_RUNTIME_DIR").unwrap_or_else(|| "/tmp".into()))
+            .join("yobu");
+    fs::create_dir_all(&runtime_dir)?;
+
+    let bundled_shell = runtime_dir.join("shell.qml");
+    let bundled_view = runtime_dir.join("LauncherView.qml");
+    fs::write(&bundled_shell, BUNDLED_SHELL)?;
+    fs::write(&bundled_view, BUNDLED_VIEW)?;
+
+    let frontend = env::var_os("YOBU_FRONTEND")
         .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("frontend/shell.qml"));
-    Command::new("qs").arg("-p").arg(frontend).spawn()?;
+        .unwrap_or(bundled_shell);
+    let custom_view = env::var_os("YOBU_LAUNCHER_VIEW")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| config::config_home().join("yobu/LauncherView.qml"));
+
+    let mut command = Command::new("qs");
+    command.arg("-p").arg(frontend);
+    if custom_view.is_file() {
+        command.env("YOBU_LAUNCHER_VIEW", custom_view);
+    }
+    command.spawn()?;
     Ok(())
 }
 
@@ -146,7 +168,7 @@ fn handle_frontend(
                 shared
                     .saved
                     .positions
-                    .insert(screen, qmenu_protocol::Position { x, y });
+                    .insert(screen, yobu_protocol::Position { x, y });
                 if let Err(error) = config::save_state(&shared.saved) {
                     eprintln!("failed to save position: {error}");
                 }
@@ -251,7 +273,7 @@ fn main() -> io::Result<()> {
     }
 
     let listener = UnixListener::bind(&path)?;
-    println!("qmenu daemon listening on {}", path.display());
+    println!("yobu daemon listening on {}", path.display());
 
     let calculator = match Calculator::new() {
         Ok(calculator) => Some(calculator),

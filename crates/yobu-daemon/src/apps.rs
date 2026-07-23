@@ -1,5 +1,5 @@
 use freedesktop_desktop_entry::desktop_entries;
-use qmenu_protocol::Entry;
+use yobu_protocol::Entry;
 use std::{collections::HashMap, io, process::Command};
 
 pub struct Applications {

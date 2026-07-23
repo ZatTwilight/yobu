@@ -1,5 +1,5 @@
 [package]
-name = "qmenu-protocol"
+name = "yobu-protocol"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

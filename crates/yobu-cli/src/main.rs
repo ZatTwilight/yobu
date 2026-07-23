@@ -1,4 +1,4 @@
-use qmenu_protocol::{Entry, Message, Role};
+use yobu_protocol::{Entry, Message, Role};
 use std::{
     env,
     io::{self, BufRead, BufReader, IsTerminal, Write},
@@ -8,12 +8,41 @@ use std::{
     time::{Duration, Instant},
 };
 
+const DEFAULT_VIEW: &str = include_str!("../../../frontend/LauncherView.qml");
+
+fn config_home() -> PathBuf {
+    env::var_os("XDG_CONFIG_HOME")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| {
+            PathBuf::from(env::var_os("HOME").unwrap_or_else(|| ".".into())).join(".config")
+        })
+}
+
+fn init_view() -> io::Result<()> {
+    let path = config_home().join("yobu/LauncherView.qml");
+    if path.exists() {
+        return Err(io::Error::new(
+            io::ErrorKind::AlreadyExists,
+            format!(
+                "{} already exists; remove it before initializing",
+                path.display()
+            ),
+        ));
+    }
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    std::fs::write(&path, DEFAULT_VIEW)?;
+    println!("Created {}", path.display());
+    Ok(())
+}
+
 fn socket_path() -> PathBuf {
-    env::var_os("QMENU_SOCKET")
+    env::var_os("YOBU_SOCKET")
         .map(PathBuf::from)
         .unwrap_or_else(|| {
             PathBuf::from(env::var_os("XDG_RUNTIME_DIR").unwrap_or_else(|| "/tmp".into()))
-                .join("qmenu.sock")
+                .join("yobu.sock")
         })
 }
 
@@ -27,7 +56,7 @@ fn connect() -> io::Result<UnixStream> {
     UnixStream::connect(socket_path()).map_err(|error| {
         io::Error::new(
             error.kind(),
-            format!("cannot connect to qmenu daemon: {error}"),
+            format!("cannot connect to yobu daemon: {error}"),
         )
     })
 }
@@ -177,6 +206,7 @@ fn benchmark_display(iterations: usize) -> io::Result<()> {
 fn main() -> io::Result<()> {
     let mut args = env::args().skip(1);
     match args.next() {
+        Some(flag) if flag == "--init-view" => init_view(),
         Some(flag) if flag == "--benchmark-display" => {
             let iterations = args
                 .next()

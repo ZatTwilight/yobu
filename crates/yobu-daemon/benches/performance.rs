@@ -1,6 +1,6 @@
 use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
-use qmenu_daemon::{apps::Applications, search::SearchIndex};
-use qmenu_protocol::{Entry, Message};
+use yobu_daemon::{apps::Applications, search::SearchIndex};
+use yobu_protocol::{Entry, Message};
 use std::{collections::HashMap, hint::black_box, time::Duration};
 
 fn synthetic_entries(count: usize) -> Vec<Entry> {
