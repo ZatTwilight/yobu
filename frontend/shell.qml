@@ -11,10 +11,13 @@ PanelWindow {
     color: "transparent"
     exclusiveZone: 0
 
+    // Request the full output explicitly; four-edge anchoring is reduced by
+    // the desktop's 40px reserved panel area on this compositor.
+    implicitWidth: screen ? screen.width : 0
+    implicitHeight: screen ? screen.height : 0
+
     anchors {
         top: true
-        right: true
-        bottom: true
         left: true
     }
 
@@ -75,15 +78,18 @@ PanelWindow {
 
 	function revealLauncher() {
 		if (!visible || !backingWindowVisible || width <= 0 || height <= 0) return
+        if (screen && (width !== screen.width || height !== screen.height)) return
 
-        launcher.width = Math.min(uiConfig.width, width)
-        launcher.height = Math.min(uiConfig.height, height)
+        launcher.width = Math.min(uiConfig.width, window.width)
+        launcher.height = Math.min(uiConfig.height, window.height)
         applyPosition(pendingPositions)
         launcher.visible = true
         launcher.focusInput()
     }
 
     onBackingWindowVisibleChanged: revealLauncher()
+    onWidthChanged: revealLauncher()
+    onHeightChanged: revealLauncher()
 
     Connections {
         target: launcher.Window.window
@@ -111,7 +117,7 @@ PanelWindow {
 			onRead: data => {
                 const message = JSON.parse(data)
 				console.log("got message", message.type)
-                if (message.type === "show") {
+				if (message.type === "show") {
                     window.uiConfig = message.config
                     window.pendingPositions = message.positions
                     window.benchmarkDisplay = message.benchmark === true
@@ -120,8 +126,8 @@ PanelWindow {
                     launcher.maxResults = message.config.max_results
                     launcher.reset()
                     launcher.visible = false
-					window.visible = true
 					window.screen = window.focusedScreen()
+					window.visible = true
                     window.revealLauncher()
                 } else if (message.type === "search_results") {
                     launcher.applySearchResults(message.query, message.entries)
