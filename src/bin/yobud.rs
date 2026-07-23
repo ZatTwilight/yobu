@@ -57,25 +57,36 @@ fn spawn_frontend() -> io::Result<()> {
         PathBuf::from(env::var_os("XDG_RUNTIME_DIR").unwrap_or_else(|| "/tmp".into())).join("yobu");
     fs::create_dir_all(&runtime_dir)?;
 
+    let custom_view = env::var_os("YOBU_LAUNCHER_VIEW")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| config::config_home().join("yobu/LauncherView.qml"));
+    let custom_frontend = env::var_os("YOBU_FRONTEND").map(PathBuf::from);
+
     #[cfg(debug_assertions)]
-    let default_frontend =
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("frontend/shell.qml");
+    let default_frontend = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("frontend/shell.qml");
 
     #[cfg(not(debug_assertions))]
     let default_frontend = {
         let bundled_shell = runtime_dir.join("shell.qml");
         let bundled_view = runtime_dir.join("LauncherView.qml");
         fs::write(&bundled_shell, BUNDLED_SHELL)?;
-        fs::write(&bundled_view, BUNDLED_VIEW)?;
+
+        if fs::symlink_metadata(&bundled_view).is_ok() {
+            fs::remove_file(&bundled_view)?;
+        }
+        if custom_view.is_file() {
+            std::os::unix::fs::symlink(&custom_view, &bundled_view)?;
+        } else {
+            fs::write(&bundled_view, BUNDLED_VIEW)?;
+        }
         bundled_shell
     };
 
-    let frontend = env::var_os("YOBU_FRONTEND")
-        .map(PathBuf::from)
-        .unwrap_or(default_frontend);
-    let custom_view = env::var_os("YOBU_LAUNCHER_VIEW")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| config::config_home().join("yobu/LauncherView.qml"));
+    let frontend = if cfg!(debug_assertions) {
+        default_frontend
+    } else {
+        custom_frontend.unwrap_or(default_frontend)
+    };
 
     let mut command = Command::new("qs");
     command.arg("-p").arg(frontend);
