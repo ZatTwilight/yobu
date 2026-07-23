@@ -182,6 +182,9 @@ fn handle_client(
 
     let (message, should_spawn) = {
         let mut shared = state.lock().unwrap();
+        // The daemon is long-lived, so reload UI settings for every presentation.
+        // This makes config edits take effect the next time the launcher opens.
+        shared.ui_config = config::load_config();
         shared.native_mode = entries.is_empty();
         let entries = if shared.native_mode {
             shared.applications.entries.clone()

@@ -49,7 +49,7 @@ height = 420
 max_results = 50
 ```
 
-See `config.example.toml`.
+See `config.example.toml`. The daemon rereads this file whenever the launcher opens, so changes apply on the next launch without restarting the daemon.
 
 ## Performance benchmarks
 
