@@ -1,4 +1,3 @@
-use yobu_protocol::{Entry, Message, Role};
 use std::{
     env,
     io::{self, BufRead, BufReader, IsTerminal, Write},
@@ -7,8 +6,12 @@ use std::{
     thread,
     time::{Duration, Instant},
 };
+use yobu::protocol::{Entry, Message, Role};
 
-const DEFAULT_VIEW: &str = include_str!("../../../frontend/LauncherView.qml");
+const DEFAULT_VIEW: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/frontend/LauncherView.qml"
+));
 
 fn config_home() -> PathBuf {
     env::var_os("XDG_CONFIG_HOME")

@@ -1,4 +1,4 @@
-use yobu_protocol::{Position, UiConfig};
+use crate::protocol::{Position, UiConfig};
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, env, fs, io, path::PathBuf};
 

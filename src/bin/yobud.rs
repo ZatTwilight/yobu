@@ -1,12 +1,3 @@
-mod config;
-
-use config::SavedState;
-use yobu_daemon::{
-    apps::Applications,
-    calculator::{Calculation, Calculator},
-    search::SearchIndex,
-};
-use yobu_protocol::{Entry, Message, Role};
 use std::{
     env, fs,
     io::{self, BufRead, BufReader, Write},
@@ -15,6 +6,13 @@ use std::{
     process::Command,
     sync::{Arc, Mutex},
     thread,
+};
+use yobu::{
+    apps::Applications,
+    calculator::{Calculation, Calculator},
+    config::{self, SavedState},
+    protocol::{Entry, Message, Role},
+    search::SearchIndex,
 };
 
 struct State {
@@ -27,7 +25,7 @@ struct State {
     native_mode: bool,
     calculator: Option<Calculator>,
     saved: SavedState,
-    ui_config: yobu_protocol::UiConfig,
+    ui_config: yobu::protocol::UiConfig,
 }
 
 fn socket_path() -> PathBuf {
@@ -45,13 +43,16 @@ fn send(stream: &mut UnixStream, message: &Message) -> io::Result<()> {
     stream.flush()
 }
 
-const BUNDLED_SHELL: &str = include_str!("../../../frontend/shell.qml");
-const BUNDLED_VIEW: &str = include_str!("../../../frontend/LauncherView.qml");
+const BUNDLED_SHELL: &str =
+    include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/frontend/shell.qml"));
+const BUNDLED_VIEW: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/frontend/LauncherView.qml"
+));
 
 fn spawn_frontend() -> io::Result<()> {
     let runtime_dir =
-        PathBuf::from(env::var_os("XDG_RUNTIME_DIR").unwrap_or_else(|| "/tmp".into()))
-            .join("yobu");
+        PathBuf::from(env::var_os("XDG_RUNTIME_DIR").unwrap_or_else(|| "/tmp".into())).join("yobu");
     fs::create_dir_all(&runtime_dir)?;
 
     let bundled_shell = runtime_dir.join("shell.qml");
@@ -168,7 +169,7 @@ fn handle_frontend(
                 shared
                     .saved
                     .positions
-                    .insert(screen, yobu_protocol::Position { x, y });
+                    .insert(screen, yobu::protocol::Position { x, y });
                 if let Err(error) = config::save_state(&shared.saved) {
                     eprintln!("failed to save position: {error}");
                 }

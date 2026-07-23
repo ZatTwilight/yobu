@@ -1,5 +1,5 @@
+use crate::protocol::Entry;
 use freedesktop_desktop_entry::desktop_entries;
-use yobu_protocol::Entry;
 use std::{collections::HashMap, io, process::Command};
 
 pub struct Applications {

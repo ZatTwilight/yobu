@@ -1,7 +1,7 @@
 use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
-use yobu_daemon::{apps::Applications, search::SearchIndex};
-use yobu_protocol::{Entry, Message};
 use std::{collections::HashMap, hint::black_box, time::Duration};
+use yobu::protocol::{Entry, Message};
+use yobu::{apps::Applications, search::SearchIndex};
 
 fn synthetic_entries(count: usize) -> Vec<Entry> {
     (0..count)

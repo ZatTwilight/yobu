@@ -5,28 +5,35 @@ Experimental launcher with a small Quickshell frontend and a Rust daemon/CLI.
 ## Layout
 
 - `frontend/` — minimal Quickshell UI
-- `crates/yobu-daemon/` — persistent provider and UI coordinator
-- `crates/yobu-cli/` — dmenu-style stdin/stdout client
-- `crates/yobu-protocol/` — shared wire types
+- `src/bin/` — `yobu` CLI and `yobud` daemon entry points
+- `src/` — shared protocol types and provider logic
+
+## Install
+
+```sh
+cargo install --path .
+```
+
+This installs both `yobu` and `yobud`.
 
 ## Try the piped menu
 
 Start the daemon from the repository root so it can locate `frontend/shell.qml`:
 
 ```sh
-cargo run -p yobu-daemon
+cargo run -p yobu --bin yobud
 ```
 
 Then, from another terminal, open the application launcher:
 
 ```sh
-cargo run -q -p yobu
+cargo run -q -p yobu --bin yobu
 ```
 
 Or provide piped entries, which replaces the application list for that invocation:
 
 ```sh
-printf '%s\n' Alpha Beta Gamma | cargo run -q -p yobu -- "Pick one"
+printf '%s\n' Alpha Beta Gamma | cargo run -q -p yobu --bin yobu -- "Pick one"
 ```
 
 The daemon starts Quickshell, forwards the entries, and returns piped selections on stdout. Application selections are launched directly. Escape or clicking outside exits the client with status 1.
@@ -64,7 +71,7 @@ See `config.example.toml`. The daemon rereads this file whenever the launcher op
 Run the Criterion benchmarks in release mode:
 
 ```sh
-cargo bench -p yobu-daemon --bench performance
+cargo bench -p yobu --bench performance
 ```
 
 They cover desktop-entry discovery, JSON serialization at several catalog sizes, and a Rust equivalent of the frontend's current substring search. Criterion stores detailed reports under `target/criterion/`.
@@ -72,7 +79,7 @@ They cover desktop-entry discovery, JSON serialization at several catalog sizes,
 With the daemon running, measure the real request-to-first-animation-frame path:
 
 ```sh
-cargo run --release -q -p yobu -- --benchmark-display 20
+cargo run --release -q -p yobu --bin yobu -- --benchmark-display 20
 ```
 
 The display benchmark includes socket connection, request serialization, daemon forwarding, frontend JSON/model setup, and the first frame queued for presentation after the launcher becomes visible. It excludes daemon startup and CLI process startup. The first sample includes Quickshell startup when no frontend is already connected; the command reports warm and steady-state statistics separately. Iterations have an unmeasured 100 ms settling period so the compositor can process each unmap before the next request.
@@ -80,7 +87,7 @@ The display benchmark includes socket connection, request serialization, daemon 
 To include CLI process startup, build first and time a single warm display externally:
 
 ```sh
-cargo build --release -p yobu
+cargo build --release -p yobu --bins
 hyperfine --warmup 3 'target/release/yobu --benchmark-display 1'
 ```
 
