@@ -126,7 +126,6 @@ PanelWindow {
         parser: SplitParser {
 			onRead: data => {
                 const message = JSON.parse(data)
-				console.log("got message", message.type)
 				if (message.type === "show") {
 					parseUiConfig(message.config)
                     window.pendingPositions = message.positions

@@ -2543,10 +2543,12 @@ version = "0.1.0"
 dependencies = [
  "criterion",
  "freedesktop-desktop-entry",
+ "libc",
  "neo_frizbee",
  "numby",
  "serde",
  "serde_json",
+ "signal-hook",
  "toml",
 ]
 

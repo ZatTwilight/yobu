@@ -1,3 +1,4 @@
+use signal_hook::{consts::SIGCHLD, iterator::Signals};
 use std::{
     env, fs,
     io::{self, BufRead, BufReader, Write},
@@ -288,7 +289,28 @@ fn calculation_entry(query: &str, calculation: Calculation) -> Entry {
     }
 }
 
+fn start_child_reaper() -> io::Result<()> {
+    let mut signals = Signals::new([SIGCHLD])?;
+    thread::spawn(move || {
+        for _ in signals.forever() {
+            loop {
+                // SAFETY: waitpid is called from a normal thread, and the null
+                // status pointer is valid because exit statuses are not needed.
+                let pid = unsafe { libc::waitpid(-1, std::ptr::null_mut(), libc::WNOHANG) };
+                if pid <= 0 {
+                    break;
+                }
+            }
+        }
+    });
+    Ok(())
+}
+
 fn main() -> io::Result<()> {
+    // Register before any children are spawned so short-lived processes cannot
+    // exit before the daemon is ready to reap them.
+    start_child_reaper()?;
+
     let path = socket_path();
     if path.exists() {
         fs::remove_file(&path)?;
