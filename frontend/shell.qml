@@ -78,14 +78,24 @@ PanelWindow {
 
 	function revealLauncher() {
 		if (!visible || !backingWindowVisible || width <= 0 || height <= 0) return
-        if (screen && (width !== screen.width || height !== screen.height)) return
+		if (screen && (width !== screen.width || height !== screen.height)) return
 
         launcher.width = Math.min(uiConfig.width, window.width)
         launcher.height = Math.min(uiConfig.height, window.height)
         applyPosition(pendingPositions)
         launcher.visible = true
         launcher.focusInput()
-    }
+	}
+
+	function parseUiConfig(config) {
+		window.uiConfig = config
+		if (config.width < 1) {
+			window.uiConfig.width = window.width * config.width
+		}
+		if (config.height < 1) {
+			window.uiConfig.height = window.height * config.height
+		}
+	}
 
     onBackingWindowVisibleChanged: revealLauncher()
     onWidthChanged: revealLauncher()
@@ -118,7 +128,7 @@ PanelWindow {
                 const message = JSON.parse(data)
 				console.log("got message", message.type)
 				if (message.type === "show") {
-                    window.uiConfig = message.config
+					parseUiConfig(message.config)
                     window.pendingPositions = message.positions
                     window.benchmarkDisplay = message.benchmark === true
                     launcher.prompt = message.prompt

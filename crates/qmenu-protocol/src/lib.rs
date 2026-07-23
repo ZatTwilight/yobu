@@ -18,16 +18,16 @@ pub struct Position {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UiConfig {
-    pub width: u32,
-    pub height: u32,
+    pub width: f32,
+    pub height: f32,
     pub max_results: usize,
 }
 
 impl Default for UiConfig {
     fn default() -> Self {
         Self {
-            width: 600,
-            height: 420,
+            width: 600.0,
+            height: 420.0,
             max_results: 50,
         }
     }
