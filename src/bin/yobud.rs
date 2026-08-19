@@ -14,11 +14,13 @@ use yobu::{
     config::{self, SavedState},
     protocol::{Entry, Message, Role},
     search::SearchIndex,
+    daemon::*,
 };
 
 struct State {
     frontend: Option<UnixStream>,
     client: Option<UnixStream>,
+    clients: Vec<UnixStream>,
     pending: Option<Message>,
     frontend_starting: bool,
     applications: Applications,
@@ -330,6 +332,7 @@ fn main() -> io::Result<()> {
     let state = Arc::new(Mutex::new(State {
         frontend: None,
         client: None,
+        clients: Vec::new(),
         pending: None,
         frontend_starting: false,
         applications: Applications::discover(),

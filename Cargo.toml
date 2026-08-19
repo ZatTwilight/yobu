@@ -13,6 +13,7 @@ toml = "0.8"
 freedesktop-desktop-entry = { version = "0.8.1", default-features = false }
 numby = { version = "0.1.8", default-features = false }
 neo_frizbee = "0.11"
+anyhow = "1.0.104"
 
 [dev-dependencies]
 criterion = "0.8"
