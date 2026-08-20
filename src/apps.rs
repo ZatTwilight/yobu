@@ -34,6 +34,7 @@ impl Applications {
                 label: name.into_owned(),
                 description: desktop.comment(&locales).map(|value| value.into_owned()),
                 icon: desktop.icon().map(str::to_owned),
+                preview: None,
                 value: id,
             });
         }

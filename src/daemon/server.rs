@@ -5,7 +5,10 @@ use std::{
     net::Shutdown,
     os::unix::net::{UnixListener, UnixStream},
     path::PathBuf,
-    sync::mpsc::{Receiver, Sender},
+    sync::{
+        Arc, Mutex,
+        mpsc::{Receiver, Sender},
+    },
     thread,
 };
 
@@ -15,7 +18,10 @@ use crate::{
         client::{Client, ClientId},
     },
     protocol::Envelope,
-    providers::{applications::ApplicationsProvider, cpu::CpuProvider},
+    providers::{
+        applications::ApplicationsProvider, calculator::CalculatorProvider, cpu::CpuProvider,
+        menus::MenusProvider, state::StateProvider,
+    },
     util::{IdGen, RunOnExit},
 };
 
@@ -89,6 +95,7 @@ pub fn handle_connection(
         _ => return Ok(()),
     };
     let id = c.id;
+    println!("client connected {0}", id.0);
     broker_tx
         .send(BrokerMessage::Connect(c))
         .map_err(io::Error::other)?;
@@ -127,11 +134,23 @@ pub fn start() -> io::Result<()> {
     println!("yobu daemon listening on {}", path.display());
 
     let (mut broker, broker_tx) = Broker::new();
+    let shared_state = Arc::new(Mutex::new(crate::config::load_state()));
     broker
-        .register_provider(Box::new(ApplicationsProvider::new()))
+        .register_provider(Box::new(ApplicationsProvider::with_shared(
+            shared_state.clone(),
+        )))
         .map_err(io::Error::other)?;
     broker
         .register_provider(Box::new(CpuProvider::new()))
+        .map_err(io::Error::other)?;
+    broker
+        .register_provider(Box::new(StateProvider::with_shared(shared_state.clone())))
+        .map_err(io::Error::other)?;
+    broker
+        .register_provider(Box::new(CalculatorProvider::new()))
+        .map_err(io::Error::other)?;
+    broker
+        .register_provider(Box::new(MenusProvider::new()))
         .map_err(io::Error::other)?;
     broker
         .init_providers(broker_tx.clone())
@@ -149,6 +168,7 @@ pub fn start() -> io::Result<()> {
                     if let Err(error) = handle_connection(stream, id, tx) {
                         eprintln!("connection error: {error}");
                     }
+                    println!("client disconnected {0}", id);
                 });
             }
             Err(error) => eprintln!("accept error: {error}"),

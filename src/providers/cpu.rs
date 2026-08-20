@@ -65,7 +65,7 @@ impl ProviderTrait for CpuProvider {
 
                         *last = total;
                         *cur = idle;
-                        println!("CPU Usage: {:.2}%", usage);
+                        // println!("CPU Usage: {:.2}%", usage);
                         tx.send(BrokerMessage::Publish {
                             topic: format!("metrics.{name}"),
                             payload: json!({ "usage": usage }),
@@ -91,7 +91,10 @@ impl ProviderTrait for CpuProvider {
         match action {
             "current" => {
                 let current = self.current.lock().unwrap();
-                Ok(ActionResult { result: json!({ "idle": *current }), events: vec![] })
+                Ok(ActionResult {
+                    result: json!({ "idle": *current }),
+                    events: vec![],
+                })
             }
             _ => Err(anyhow::anyhow!("Unknown action: {}", action)),
         }

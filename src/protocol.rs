@@ -1,5 +1,4 @@
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 pub type RequestId = u64;
 
@@ -42,8 +41,12 @@ pub enum Envelope {
 pub struct Entry {
     pub id: String,
     pub label: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub icon: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub preview: Option<String>,
     pub value: String,
 }
 
@@ -68,48 +71,4 @@ impl Default for UiConfig {
             max_results: 50,
         }
     }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
-pub enum Message {
-    Data(serde_json::Value),
-    Hello {
-        role: Role,
-    },
-    Show {
-        prompt: String,
-        entries: Vec<Entry>,
-        positions: HashMap<String, Position>,
-        config: UiConfig,
-        #[serde(default)]
-        benchmark: bool,
-    },
-    Search {
-        query: String,
-    },
-    SearchResults {
-        query: String,
-        entries: Vec<Entry>,
-    },
-    Position {
-        screen: String,
-        x: f64,
-        y: f64,
-    },
-    Selected {
-        value: String,
-    },
-    Presented,
-    Cancelled,
-    Error {
-        message: String,
-    },
-}
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum Role {
-    Client,
-    Frontend,
 }

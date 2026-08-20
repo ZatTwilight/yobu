@@ -77,7 +77,24 @@ impl Broker {
         while let Ok(message) = self.rx.recv() {
             match message {
                 BrokerMessage::Connect(client) => {
+                    // Evict any existing client with the same name. On hot
+                    // reload the old connection may not have closed yet, so the
+                    // new Hello arrives before the old Disconnect. This also
+                    // covers crashed or killed frontends whose streams never
+                    // sent EOF.
+                    let name = client.name.clone();
+                    let stale: Vec<ClientId> = self
+                        .clients
+                        .iter()
+                        .filter(|(_, c)| c.name == name)
+                        .map(|(id, _)| *id)
+                        .collect();
+                    for id in &stale {
+                        eprintln!("evicting stale client {} (name: {name})", id.0);
+                        self.clients.remove(id);
+                    }
                     self.clients.insert(client.id, client);
+                    println!("Client connected - {}", self.clients.len());
                 }
                 BrokerMessage::Disconnect(id) => {
                     self.clients.remove(&id);
@@ -99,6 +116,7 @@ impl Broker {
     fn handle_inbound(&mut self, from: ClientId, message: Envelope) {
         match message {
             Envelope::Subscribe { topic } => {
+                println!("Client {} subscribed to {}", from.0, topic);
                 if let Some(client) = self.clients.get_mut(&from) {
                     client.subscriptions.insert(topic);
                 }
