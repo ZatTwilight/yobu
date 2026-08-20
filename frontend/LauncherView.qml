@@ -17,6 +17,8 @@ Rectangle {
     signal queryChanged(string query)
 
     property var filteredEntries: entries.slice(0, maxResults)
+    readonly property var currentEntry: list.currentIndex >= 0 ? filteredEntries[list.currentIndex] : null
+    readonly property string currentPreview: currentEntry?.preview ?? ""
 
     function applySearchResults(query, results) {
         if (input.text === query)
@@ -206,7 +208,7 @@ Rectangle {
             Layout.fillWidth: true
             Layout.fillHeight: true
             Layout.leftMargin: 12
-            Layout.rightMargin: 8
+            Layout.rightMargin: root.currentPreview !== "" ? Math.round(root.width * 0.44) : 8
             Layout.bottomMargin: 10
             rightMargin: 8
             clip: true
@@ -368,6 +370,31 @@ Rectangle {
                 Text { text: "↵"; color: "#e6c384"; font.pixelSize: 12 }
                 Text { text: "open"; color: "#727169"; font.pixelSize: 10 }
             }
+        }
+    }
+
+    Rectangle {
+        visible: root.currentPreview !== ""
+        anchors.right: parent.right
+        anchors.rightMargin: 14
+        anchors.top: parent.top
+        anchors.topMargin: 104
+        anchors.bottom: parent.bottom
+        anchors.bottomMargin: 38
+        width: Math.round(parent.width * 0.40)
+        radius: 6
+        color: "#16161d"
+        border.width: 1
+        border.color: "#54546d"
+        clip: true
+
+        Image {
+            anchors.fill: parent
+            anchors.margins: 8
+            source: root.currentPreview
+            fillMode: Image.PreserveAspectFit
+            asynchronous: true
+            cache: false
         }
     }
 }
