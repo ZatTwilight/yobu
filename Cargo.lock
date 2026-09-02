@@ -2630,6 +2630,7 @@ name = "yobu"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "chrono",
  "criterion",
  "freedesktop-desktop-entry",
  "libc",
@@ -2640,6 +2641,7 @@ dependencies = [
  "serde_json",
  "signal-hook",
  "toml",
+ "ureq",
 ]
 
 [[package]]

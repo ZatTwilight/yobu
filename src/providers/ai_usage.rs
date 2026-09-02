@@ -1,8 +1,11 @@
 use std::{
     env,
-    io::Read,
-    process::{Command, Stdio},
-    sync::{Arc, Condvar, Mutex, mpsc::Sender},
+    io::{BufRead, BufReader, Write},
+    process::{Child, Command, Stdio},
+    sync::{
+        Arc, Condvar, Mutex,
+        mpsc::{self, Receiver, Sender},
+    },
     thread,
     time::Duration,
 };
@@ -13,20 +16,19 @@ use serde_json::{Value, json};
 use crate::{
     config::config_home,
     daemon::broker::BrokerMessage,
-    providers::api::{ActionResult, ProviderTrait},
+    providers::{
+        ai_usage_native::{codex_record, opencode_record},
+        api::{ActionResult, ProviderTrait},
+    },
 };
 
-/// One collector invocation's timeout — the collectors walk session files on
-/// a cold cache, so this needs to be generous.
-const COLLECT_TIMEOUT: Duration = Duration::from_secs(90);
+const CODEX_RPC_TIMEOUT: Duration = Duration::from_secs(8);
 const DEFAULT_POLL_SECS: u64 = 300;
 
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(default)]
 pub struct AiUsageConfig {
     pub poll_secs: Option<u64>,
-    pub codex_bin: Option<String>,
-    pub opencode_bin: Option<String>,
 }
 
 impl AiUsageConfig {
@@ -40,7 +42,7 @@ impl AiUsageConfig {
             std::fs::read_to_string(config_home().join("yobu/config.toml")).unwrap_or_default();
         toml::from_str::<File>(&text)
             .ok()
-            .and_then(|f| f.ai)
+            .and_then(|file| file.ai)
             .unwrap_or_default()
     }
 
@@ -49,93 +51,175 @@ impl AiUsageConfig {
     }
 }
 
-struct Source {
-    topic: &'static str,
-    bin: String,
+fn rpc_request(
+    child: &mut Child,
+    responses: &Receiver<Value>,
+    id: u64,
+    method: &str,
+    params: Value,
+) -> Result<Value, anyhow::Error> {
+    let stdin = child
+        .stdin
+        .as_mut()
+        .ok_or_else(|| anyhow::anyhow!("codex app-server stdin closed"))?;
+    serde_json::to_writer(
+        &mut *stdin,
+        &json!({ "id": id, "method": method, "params": params }),
+    )?;
+    stdin.write_all(b"\n")?;
+    stdin.flush()?;
+
+    let deadline = std::time::Instant::now() + CODEX_RPC_TIMEOUT;
+    loop {
+        let remaining = deadline.saturating_duration_since(std::time::Instant::now());
+        let message = responses
+            .recv_timeout(remaining)
+            .map_err(|error| anyhow::anyhow!("codex {method}: {error}"))?;
+        if message.get("id").and_then(Value::as_u64) != Some(id) {
+            continue;
+        }
+        if let Some(error) = message.get("error") {
+            return Err(anyhow::anyhow!("codex {method}: {error}"));
+        }
+        return Ok(message.get("result").cloned().unwrap_or(Value::Null));
+    }
 }
 
-impl Source {
-    fn new(topic: &'static str, configured: Option<&str>, collector: &str) -> Self {
-        let bin = configured.map(Into::into).unwrap_or_else(|| {
-            let home = env::var_os("HOME")
-                .map(std::path::PathBuf::from)
-                .unwrap_or_default();
-            home.join(".config/quickshell/bin")
-                .join(collector)
-                .display()
-                .to_string()
-        });
-        Self { topic, bin }
-    }
+fn codex_limits() -> Result<Value, anyhow::Error> {
+    // This is the only external process used by the AI usage provider. Codex
+    // exposes account rate limits through its official app-server protocol.
+    let mut child = Command::new("codex")
+        .args(["-s", "read-only", "-a", "never", "app-server"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .map_err(|error| anyhow::anyhow!("spawn codex app-server: {error}"))?;
 
-    /// Run the collector and parse its single JSON record.
-    ///
-    /// yobud runs a global SIGCHLD reaper that reaps every child, so the
-    /// exit status is usually already gone — completion is detected via
-    /// stdout EOF instead, and ECHILD is treated as "exited and reaped".
-    fn collect(&self) -> Result<Value, anyhow::Error> {
-        let mut child = Command::new(&self.bin)
-            .arg("--limits-only")
-            .stdout(Stdio::piped())
-            .stderr(Stdio::null())
-            .spawn()
-            .map_err(|e| anyhow::anyhow!("spawn {}: {e}", self.bin))?;
-
-        let mut stdout = child.stdout.take().expect("stdout piped");
-        let reader = thread::spawn(move || {
-            let mut buf = String::new();
-            let _ = stdout.read_to_string(&mut buf);
-            buf
-        });
-
-        let deadline = std::time::Instant::now() + COLLECT_TIMEOUT;
-        let output = loop {
-            let remaining = deadline.saturating_duration_since(std::time::Instant::now());
-            if remaining.is_zero() {
-                let _ = child.kill();
-                let _ = child.wait();
-                return Err(anyhow::anyhow!("{} timed out", self.bin));
+    let stdout = child.stdout.take().expect("stdout piped");
+    let (response_tx, response_rx) = mpsc::channel();
+    thread::spawn(move || {
+        for line in BufReader::new(stdout).lines().map_while(Result::ok) {
+            if let Ok(message) = serde_json::from_str(&line) {
+                let _ = response_tx.send(message);
             }
-            if reader.is_finished() {
-                break reader
-                    .join()
-                    .map_err(|_| anyhow::anyhow!("collector reader panicked"))?;
-            }
-            thread::sleep(Duration::from_millis(50));
-        };
-
-        // stdout hit EOF, so the collector has exited — the global reaper
-        // may have taken the status already (ECHILD), which is fine.
-        match child.try_wait() {
-            Ok(Some(status)) if !status.success() => {
-                return Err(anyhow::anyhow!("{} exited with {status}", self.bin));
-            }
-            Ok(_) => {}
-            Err(e) if e.raw_os_error() == Some(libc::ECHILD) => {}
-            Err(e) => return Err(anyhow::anyhow!("wait {}: {e}", self.bin)),
         }
-        let record: Value = serde_json::from_str(output.trim())
-            .map_err(|e| anyhow::anyhow!("parse {}: {e}", self.bin))?;
-        if record.get("id").is_none() {
-            return Err(anyhow::anyhow!("{} produced no record id", self.bin));
-        }
-        Ok(record)
-    }
+    });
 
-    fn availability(&self, error: &str) -> Value {
-        json!({ "id": self.topic.rsplit('.').next().unwrap_or(self.topic), "available": false, "error": error })
+    let result = (|| {
+        rpc_request(
+            &mut child,
+            &response_rx,
+            1,
+            "initialize",
+            json!({ "clientInfo": { "name": "yobu", "version": env!("CARGO_PKG_VERSION") } }),
+        )?;
+        let stdin = child
+            .stdin
+            .as_mut()
+            .ok_or_else(|| anyhow::anyhow!("codex app-server stdin closed"))?;
+        serde_json::to_writer(
+            &mut *stdin,
+            &json!({ "method": "initialized", "params": {} }),
+        )?;
+        stdin.write_all(b"\n")?;
+        stdin.flush()?;
+
+        let account = rpc_request(&mut child, &response_rx, 2, "account/read", json!({}))?;
+        let response = rpc_request(
+            &mut child,
+            &response_rx,
+            3,
+            "account/rateLimits/read",
+            json!({}),
+        )?;
+        let rate_limits = response.get("rateLimits").cloned().unwrap_or(Value::Null);
+        let plan = rate_limits
+            .get("planType")
+            .or_else(|| account.pointer("/account/planType"))
+            .cloned()
+            .unwrap_or(Value::String(String::new()));
+        let limits = ["primary", "secondary"]
+            .into_iter()
+            .filter_map(|name| {
+                let window = rate_limits.get(name)?;
+                let used = window.get("usedPercent")?.as_f64()?;
+                let minutes = window
+                    .get("windowDurationMins")
+                    .and_then(Value::as_u64)
+                    .unwrap_or(0);
+                let label = match minutes {
+                    10_080 => "Weekly (7-day)".to_string(),
+                    value if value > 0 && value % 60 == 0 => format!("{}h window", value / 60),
+                    value if value > 0 => format!("{value}m window"),
+                    _ => "Limit".to_string(),
+                };
+                let resets_at = window
+                    .get("resetsAt")
+                    .and_then(Value::as_i64)
+                    .and_then(|timestamp| chrono::DateTime::from_timestamp(timestamp, 0))
+                    .map(|time| time.to_rfc3339())
+                    .unwrap_or_default();
+                Some(json!({ "label": label, "percent": used / 100.0, "resetsAt": resets_at }))
+            })
+            .collect::<Vec<_>>();
+        Ok(json!({
+            "limits": limits,
+            "tierLabel": plan,
+            "usageStatusText": "",
+            "authHelpText": "Run `codex login` to authenticate."
+        }))
+    })();
+
+    let _ = child.kill();
+    let _ = child.wait();
+    result
+}
+
+fn merge(record: &mut Value, fields: &Value) {
+    if let (Some(record), Some(fields)) = (record.as_object_mut(), fields.as_object()) {
+        record.extend(fields.clone());
     }
+}
+
+fn collect_codex() -> Value {
+    let mut record = codex_record();
+    match codex_limits() {
+        Ok(limits) => merge(&mut record, &limits),
+        Err(error) => merge(
+            &mut record,
+            &json!({
+                "limits": [],
+                "tierLabel": "",
+                "usageStatusText": "Codex limits unavailable",
+                "authHelpText": error.to_string(),
+            }),
+        ),
+    }
+    record
+}
+
+fn publish(shared: &Shared, tx: &Sender<BrokerMessage>, topic: &str, payload: Value) {
+    let mut records = shared.records.lock().unwrap();
+    if let Some(slot) = records.iter_mut().find(|(name, _)| name == topic) {
+        slot.1 = payload.clone();
+    } else {
+        records.push((topic.to_string(), payload.clone()));
+    }
+    drop(records);
+    tx.send(BrokerMessage::Publish {
+        topic: topic.to_string(),
+        payload,
+    })
+    .expect("failed to publish ai usage");
 }
 
 struct Shared {
-    /// Last published payload per topic, for the `status` action.
     records: Mutex<Vec<(String, Value)>>,
-    /// Set by `refresh` so the polling loop wakes up early.
     wake: (Mutex<bool>, Condvar),
 }
 
 pub struct AiUsageProvider {
-    sources: Vec<Source>,
     shared: Arc<Shared>,
     poll_secs: Duration,
 }
@@ -143,14 +227,6 @@ pub struct AiUsageProvider {
 impl AiUsageProvider {
     pub fn new(config: AiUsageConfig) -> Self {
         Self {
-            sources: vec![
-                Source::new("ai.codex", config.codex_bin.as_deref(), "agent-usage-codex"),
-                Source::new(
-                    "ai.opencode",
-                    config.opencode_bin.as_deref(),
-                    "agent-usage-opencode",
-                ),
-            ],
             shared: Arc::new(Shared {
                 records: Mutex::new(Vec::new()),
                 wake: (Mutex::new(false), Condvar::new()),
@@ -165,8 +241,8 @@ impl AiUsageProvider {
             .lock()
             .unwrap()
             .iter()
-            .find(|(t, _)| t == topic)
-            .map(|(_, v)| v.clone())
+            .find(|(name, _)| name == topic)
+            .map(|(_, record)| record.clone())
     }
 }
 
@@ -183,43 +259,17 @@ impl ProviderTrait for AiUsageProvider {
 
     fn init(&mut self, tx: Sender<BrokerMessage>) -> Result<(), anyhow::Error> {
         let shared = self.shared.clone();
-        let sources = self.sources.clone();
         let poll_secs = self.poll_secs;
-        let tx = tx.clone();
 
         thread::spawn(move || {
             loop {
-                for source in &sources {
-                    let payload = match source.collect() {
-                        Ok(record) => record,
-                        Err(e) => {
-                            eprintln!("ai-usage {}: {e}", source.topic);
-                            source.availability(&e.to_string())
-                        }
-                    };
+                publish(&shared, &tx, "ai.codex", collect_codex());
+                publish(&shared, &tx, "ai.opencode", opencode_record());
 
-                    let mut records = shared.records.lock().unwrap();
-                    if let Some(slot) = records.iter_mut().find(|(t, _)| t == source.topic) {
-                        slot.1 = payload.clone();
-                    } else {
-                        records.push((source.topic.to_string(), payload.clone()));
-                    }
-                    drop(records);
-
-                    tx.send(BrokerMessage::Publish {
-                        topic: source.topic.to_string(),
-                        payload,
-                    })
-                    .expect("failed to publish ai usage");
-                }
-
-                // Sleep for the poll interval, or wake early when `refresh` fires.
                 let (flag, cvar) = &shared.wake;
                 let mut wake = flag.lock().unwrap();
                 let deadline = std::time::Instant::now() + poll_secs;
                 loop {
-                    // Check before waiting: the flag may have been set during
-                    // the poll above, after the (missed) condvar notification.
                     if *wake {
                         *wake = false;
                         break;
@@ -245,11 +295,7 @@ impl ProviderTrait for AiUsageProvider {
         vec!["status".into(), "refresh".into()]
     }
 
-    fn run_action(
-        &mut self,
-        action: &str,
-        _: serde_json::Value,
-    ) -> Result<ActionResult, anyhow::Error> {
+    fn run_action(&mut self, action: &str, _: Value) -> Result<ActionResult, anyhow::Error> {
         match action {
             "status" => Ok(ActionResult {
                 result: json!({
@@ -268,15 +314,6 @@ impl ProviderTrait for AiUsageProvider {
                 })
             }
             _ => Err(anyhow::anyhow!("Unknown action: {action}")),
-        }
-    }
-}
-
-impl Clone for Source {
-    fn clone(&self) -> Self {
-        Self {
-            topic: self.topic,
-            bin: self.bin.clone(),
         }
     }
 }

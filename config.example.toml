@@ -3,10 +3,14 @@ width = 600
 height = 420
 max_results = 50
 
-# Optional — defaults shown. The provider shells out to the quickshell
-# agent-usage collectors and republishes their records on the ai.codex /
-# ai.opencode topics.
+# Independent systemd user services: auto prefers an active UWSM session,
+# otherwise systemd-run. Explicit choices: "uwsm" or "systemd".
+# No direct-spawn fallback. Terminal desktop entries require UWSM.
+#[launch]
+#backend = "auto"
+
+# Optional — defaults shown. Only account usage limits and reset times are collected.
+# Codex uses its official app-server; OpenCode Go uses its usage API.
+# Session histories and token counts are never read.
 #[ai]
 #poll_secs = 300
-#codex_bin = "/home/kait/.config/quickshell/bin/agent-usage-codex"
-#opencode_bin = "/home/kait/.config/quickshell/bin/agent-usage-opencode"

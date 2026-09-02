@@ -22,47 +22,9 @@ fn config_home() -> PathBuf {
         })
 }
 
-fn find_shell_path() -> Option<PathBuf> {
-    if let Some(p) = env::var_os("YOBU_SHELL").map(PathBuf::from) {
-        if p.is_file() {
-            return Some(p);
-        }
-    }
-    if let Some(p) = env::var_os("YOBU_FRONTEND").map(PathBuf::from) {
-        if p.is_file() {
-            return Some(p);
-        }
-    }
-    for base in [
-        env::var_os("XDG_CONFIG_HOME")
-            .map(PathBuf::from)
-            .unwrap_or_else(|| config_home()),
-        PathBuf::from(env::var_os("HOME").unwrap_or_else(|| ".".into())).join(".config"),
-    ] {
-        let p = base.join("quickshell/yobu/shell.qml");
-        if p.is_file() {
-            return Some(p);
-        }
-    }
-    // Dev fallback: repo frontend relative to manifest
-    let dev = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("frontend/shell.qml");
-    if dev.is_file() {
-        return Some(dev);
-    }
-    // Also try current dir
-    let cwd = PathBuf::from("frontend/shell.qml");
-    if cwd.is_file() {
-        return Some(cwd);
-    }
-    None
-}
-
 fn qs_ipc_args(extra: &[String]) -> Vec<String> {
-    let mut args = Vec::new();
-    if let Some(shell) = find_shell_path() {
-        args.push("-p".to_owned());
-        args.push(shell.display().to_string());
-    }
+    let config = env::var("YOBU_QUICKSHELL_CONFIG").unwrap_or_else(|_| "bar".into());
+    let mut args = vec!["-c".to_owned(), config];
     args.extend_from_slice(extra);
     args
 }
@@ -383,7 +345,7 @@ fn print_help() {
           yobu --init-view           create ~/.config/yobu/LauncherView.qml\n\
         \n\
         Env:\n  \
-          YOBU_SHELL   path to shell.qml for qs -p"
+          YOBU_QUICKSHELL_CONFIG   Quickshell config name (default: bar)"
     );
 }
 

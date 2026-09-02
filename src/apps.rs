@@ -1,10 +1,16 @@
 use crate::protocol::Entry;
 use freedesktop_desktop_entry::desktop_entries;
-use std::{collections::HashMap, io, process::Command};
+use std::{collections::HashMap, io, path::PathBuf};
+
+struct LaunchTarget {
+    desktop: PathBuf,
+    command: Vec<String>,
+    terminal: bool,
+}
 
 pub struct Applications {
     pub entries: Vec<Entry>,
-    commands: HashMap<String, Vec<String>>,
+    commands: HashMap<String, LaunchTarget>,
 }
 
 impl Applications {
@@ -28,7 +34,14 @@ impl Applications {
             }
 
             let id = format!("app:{}", desktop.appid);
-            commands.insert(id.clone(), command);
+            commands.insert(
+                id.clone(),
+                LaunchTarget {
+                    desktop: desktop.path.clone(),
+                    command,
+                    terminal: desktop.terminal(),
+                },
+            );
             entries.push(Entry {
                 id: id.clone(),
                 label: name.into_owned(),
@@ -49,8 +62,7 @@ impl Applications {
             .commands
             .get(id)
             .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "application not found"))?;
-        Command::new(&command[0]).args(&command[1..]).spawn()?;
-        Ok(())
+        crate::launcher::launch(&command.desktop, &command.command, command.terminal)
     }
 }
 

@@ -4,7 +4,7 @@ use std::{
     time::Duration,
 };
 
-use notify::{RecommendedWatcher, RecursiveMode, Watcher};
+use notify::{EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use serde::Deserialize;
 use serde_json::json;
 
@@ -53,6 +53,12 @@ fn default_max_results() -> usize {
     50
 }
 
+fn should_queue_event(result: &notify::Result<notify::Event>) -> bool {
+    // Catalog discovery reads watched files. Access events must not trigger
+    // another scan or reset the debounce timer. Preserve errors/rescan events.
+    !matches!(result, Ok(event) if matches!(event.kind, EventKind::Access(_)))
+}
+
 impl ApplicationsProvider {
     pub fn new() -> Self {
         Self::with_shared(Arc::new(Mutex::new(config::load_state())))
@@ -79,6 +85,9 @@ impl ApplicationsProvider {
         let (event_tx, event_rx) = std::sync::mpsc::channel();
         let mut watcher = RecommendedWatcher::new(
             move |result| {
+                if !should_queue_event(&result) {
+                    return;
+                }
                 if event_tx.send(result).is_err() {
                     eprintln!("application watcher event receiver stopped");
                 }
@@ -224,5 +233,43 @@ impl ProviderTrait for ApplicationsProvider {
             }
             _ => Err(anyhow::anyhow!("unknown applications action: {action}")),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use notify::event::{AccessKind, AccessMode, CreateKind, ModifyKind, RemoveKind};
+
+    #[test]
+    fn access_events_never_reach_the_debounce_queue() {
+        for kind in [
+            AccessKind::Any,
+            AccessKind::Read,
+            AccessKind::Open(AccessMode::Read),
+            AccessKind::Close(AccessMode::Read),
+            AccessKind::Close(AccessMode::Write),
+            AccessKind::Other,
+        ] {
+            assert!(!should_queue_event(&Ok(notify::Event::new(
+                EventKind::Access(kind)
+            ))));
+        }
+    }
+
+    #[test]
+    fn changes_rescans_and_errors_still_reach_the_queue() {
+        for kind in [
+            EventKind::Create(CreateKind::Any),
+            EventKind::Modify(ModifyKind::Any),
+            EventKind::Remove(RemoveKind::Any),
+            EventKind::Any,
+            EventKind::Other,
+        ] {
+            assert!(should_queue_event(&Ok(notify::Event::new(kind))));
+        }
+        assert!(should_queue_event(&Err(notify::Error::generic(
+            "watch error"
+        ))));
     }
 }

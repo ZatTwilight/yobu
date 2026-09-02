@@ -1,0 +1,14 @@
+[Unit]
+Description=Yobu provider daemon
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+Type=exec
+ExecStart=%h/.cargo/bin/yobud
+Restart=on-failure
+RestartSec=2
+Slice=app.slice
+
+[Install]
+WantedBy=graphical-session.target
