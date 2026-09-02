@@ -58,11 +58,10 @@ printf '%s\n' \
   | yobu --json-lines "Pick one"
 ```
 
-Clipboard history has a dedicated adapter with cached image previews:
+Clipboard history has a dedicated adapter with cached image previews. It displays the menu, decodes the selected record, and copies it back to the Wayland clipboard:
 
 ```sh
-selection="$(yobu --cliphist)" \
-  && printf '%s\n' "$selection" | cliphist decode | wl-copy
+yobu --cliphist
 ```
 
 ## Features

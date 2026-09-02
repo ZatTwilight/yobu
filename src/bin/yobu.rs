@@ -296,7 +296,7 @@ fn do_hide() -> io::Result<()> {
     ])
 }
 
-fn do_piped(prompt: String, entries: Vec<Entry>) -> io::Result<()> {
+fn run_menu(prompt: String, entries: Vec<Entry>) -> io::Result<Option<String>> {
     let mut daemon = DaemonClient::connect()?;
     let created = daemon.request(
         "menus.create",
@@ -319,14 +319,53 @@ fn do_piped(prompt: String, entries: Vec<Entry>) -> io::Result<()> {
         {
             continue;
         }
-        match result.get("value") {
-            Some(serde_json::Value::String(value)) => {
-                println!("{value}");
-                return Ok(());
-            }
-            _ => std::process::exit(1),
-        }
+        return Ok(result
+            .get("value")
+            .and_then(|value| value.as_str())
+            .map(str::to_owned));
     }
+}
+
+fn do_piped(prompt: String, entries: Vec<Entry>) -> io::Result<()> {
+    match run_menu(prompt, entries)? {
+        Some(value) => {
+            println!("{value}");
+            Ok(())
+        }
+        None => std::process::exit(1),
+    }
+}
+
+fn do_cliphist() -> io::Result<()> {
+    let Some(selection) = run_menu("Clipboard".into(), cliphist_entries(500)?)? else {
+        std::process::exit(1);
+    };
+
+    let mut decoder = Command::new("cliphist")
+        .arg("decode")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()?;
+    decoder
+        .stdin
+        .as_mut()
+        .ok_or_else(|| io::Error::other("cannot write to cliphist decode"))?
+        .write_all(selection.as_bytes())?;
+    let decoded = decoder.wait_with_output()?;
+    if !decoded.status.success() {
+        return Err(io::Error::other("cliphist decode failed"));
+    }
+
+    let mut copier = Command::new("wl-copy").stdin(Stdio::piped()).spawn()?;
+    copier
+        .stdin
+        .as_mut()
+        .ok_or_else(|| io::Error::other("cannot write to wl-copy"))?
+        .write_all(&decoded.stdout)?;
+    if !copier.wait()?.success() {
+        return Err(io::Error::other("wl-copy failed"));
+    }
+    Ok(())
 }
 
 fn print_help() {
@@ -338,7 +377,9 @@ fn print_help() {
           yobu --show                show launcher\n  \
           yobu --hide                hide launcher\n  \
           yobu --toggle              toggle launcher\n  \
+          yobu --cliphist            choose and copy clipboard history\n  \
           printf 'a\\nb\\nc' | yobu \"Pick one\"   piped menu, prints selection\n  \
+          producer | yobu --json-lines \"Pick one\"  structured entries with previews\n  \
           yobu --init-view           create ~/.config/yobu/LauncherView.qml\n\
         \n\
         Env:\n  \
@@ -359,7 +400,7 @@ fn main() -> io::Result<()> {
         return init_view();
     }
     if args.first().map(|s| s.as_str()) == Some("--cliphist") {
-        return do_piped("Clipboard".into(), cliphist_entries(500)?);
+        return do_cliphist();
     }
     if args.first().map(|s| s.as_str()) == Some("--json-lines") {
         args.remove(0);

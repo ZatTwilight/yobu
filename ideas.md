@@ -1,4 +1,4 @@
-- hot reload of .desktop files -- done
-- display binary files if possible (images mainly)
-- calc copy -- done
-- simplest form of calc 10 not 10.00
+- [x] hot reload of .desktop files
+- [x] display binary files if possible (images mainly)
+- [x] calc copy
+- [ ] simplest form of calc 10 not 10.00
