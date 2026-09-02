@@ -1,6 +1,5 @@
 use std::sync::atomic::AtomicU64;
 
-
 pub struct IdGen(AtomicU64);
 
 impl IdGen {

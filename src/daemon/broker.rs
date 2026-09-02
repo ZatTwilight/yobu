@@ -1,4 +1,7 @@
-use std::{collections::HashMap, sync::mpsc::{Receiver, Sender}};
+use std::{
+    collections::HashMap,
+    sync::mpsc::{Receiver, Sender},
+};
 
 use crate::{
     daemon::client::{Client, ClientId},
@@ -56,7 +59,8 @@ impl Broker {
             if self.actions.contains_key(&method) {
                 return Err(anyhow::anyhow!("action already registered: {method}"));
             }
-            self.actions.insert(method, (name.clone(), action.to_owned()));
+            self.actions
+                .insert(method, (name.clone(), action.to_owned()));
         }
 
         self.providers.insert(name, provider);

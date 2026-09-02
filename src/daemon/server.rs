@@ -19,8 +19,9 @@ use crate::{
     },
     protocol::Envelope,
     providers::{
-        applications::ApplicationsProvider, calculator::CalculatorProvider, cpu::CpuProvider,
-        menus::MenusProvider, state::StateProvider,
+        ai_usage::AiUsageProvider, applications::ApplicationsProvider,
+        calculator::CalculatorProvider, cpu::CpuProvider, menus::MenusProvider,
+        state::StateProvider,
     },
     util::{IdGen, RunOnExit},
 };
@@ -142,6 +143,9 @@ pub fn start() -> io::Result<()> {
         .map_err(io::Error::other)?;
     broker
         .register_provider(Box::new(CpuProvider::new()))
+        .map_err(io::Error::other)?;
+    broker
+        .register_provider(Box::new(AiUsageProvider::default()))
         .map_err(io::Error::other)?;
     broker
         .register_provider(Box::new(StateProvider::with_shared(shared_state.clone())))

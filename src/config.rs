@@ -1,6 +1,11 @@
 use crate::protocol::{Position, UiConfig};
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, env, fs, io, path::PathBuf, time::{SystemTime, UNIX_EPOCH}};
+use std::{
+    collections::HashMap,
+    env, fs, io,
+    path::PathBuf,
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FrecencyEntry {
@@ -9,7 +14,9 @@ pub struct FrecencyEntry {
     pub last_access: u64,
 }
 
-fn default_count() -> u32 { 1 }
+fn default_count() -> u32 {
+    1
+}
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct SavedState {
@@ -39,7 +46,9 @@ impl SavedState {
     }
 
     pub fn frecency_score(&self, id: &str, now: u64) -> f64 {
-        let Some(entry) = self.frecency.get(id) else { return 0.0 };
+        let Some(entry) = self.frecency.get(id) else {
+            return 0.0;
+        };
         let delta = now.saturating_sub(entry.last_access) as f64;
         // Half-life 14 days — mirrors fff's frecency decay idea.
         let half_life = 14.0 * 24.0 * 3600.0;
@@ -57,7 +66,10 @@ impl SavedState {
             let last_access = now.saturating_sub((rank as u64) * 86400);
             self.frecency.insert(
                 id.clone(),
-                FrecencyEntry { count: 1, last_access },
+                FrecencyEntry {
+                    count: 1,
+                    last_access,
+                },
             );
         }
     }

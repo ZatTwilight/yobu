@@ -2,3 +2,11 @@
 width = 600
 height = 420
 max_results = 50
+
+# Optional — defaults shown. The provider shells out to the quickshell
+# agent-usage collectors and republishes their records on the ai.codex /
+# ai.opencode topics.
+#[ai]
+#poll_secs = 300
+#codex_bin = "/home/kait/.config/quickshell/bin/agent-usage-codex"
+#opencode_bin = "/home/kait/.config/quickshell/bin/agent-usage-opencode"

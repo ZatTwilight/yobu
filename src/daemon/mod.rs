@@ -1,3 +1,3 @@
-pub mod server;
-pub mod client;
 pub mod broker;
+pub mod client;
+pub mod server;
